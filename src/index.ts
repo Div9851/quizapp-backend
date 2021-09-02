@@ -1,28 +1,22 @@
-import * as dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import jwt from "express-jwt";
 import jwksRsa from "jwks-rsa";
+import env from "env";
 
 import router from "./routes/v1/index";
-
-dotenv.config();
-
-const jwksUri = process.env.JWKS_URI || "";
-const audience = process.env.AUDIENCE || "";
-const issuer = process.env.ISSUER || "";
 
 const checkJwt = jwt({
   secret: jwksRsa.expressJwtSecret({
     cache: true,
     rateLimit: true,
     jwksRequestsPerMinute: 5,
-    jwksUri: jwksUri,
+    jwksUri: env.jwksUri,
   }),
 
-  audience: audience,
-  issuer: [issuer],
+  audience: env.audience,
+  issuer: [env.issuer],
   algorithms: ["RS256"],
 });
 
@@ -37,8 +31,6 @@ app.use(checkJwt);
 // ルーティング
 app.use("/v1", router);
 
-const port = process.env.PORT || 8000;
-
 // APIサーバ起動
-app.listen(port);
-console.log("Express WebApi listening on port " + port);
+app.listen(env.appPort);
+console.log("Express WebApi listening on port " + env.appPort);
