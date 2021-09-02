@@ -1,37 +1,47 @@
 import express from "express";
-import pool from "db/postgres";
+import { StatusCodes, ReasonPhrases } from "http-status-codes";
+import * as usersModel from "models/users";
 
 const router = express.Router();
 
 // GETリクエスト
 router.get("/", (req: express.Request, res: express.Response) => {
-  const query = "SELECT id, name FROM users WHERE id = $1";
-  const user: any = req.user;
-  // const userId = user.iss + "#" + user.sub;
-  const userId = "hoge";
+  const token: any = req.user;
+  const userId = token.iss + "#" + token.sub;
   (async () => {
-    const { rows } = await pool.query(query, [userId]);
-    console.log("user:", rows[0]);
-    res.status(200).json({ id: rows[0].id, name: rows[0].name });
+    const { rows } = await usersModel.get(userId);
+    if (rows.length == 0) {
+      throw new Error(`user '${userId}' not found`);
+    }
+    res.status(StatusCodes.OK).json({ id: rows[0].id, name: rows[0].name });
   })().catch((err) => {
+    console.log(err);
     setImmediate(() => {
-      res.status(400).json({ message: err });
+      res
+        .status(StatusCodes.INTERNAL_SERVER_ERROR)
+        .json({ message: ReasonPhrases.INTERNAL_SERVER_ERROR });
     });
   });
 });
 
 // POSTリクエスト
 router.post("/", (req: express.Request, res: express.Response) => {
-  const query = "INSERT (id, name) INTO users VALUES ($1, $2)";
-  const user: any = req.user;
-  const userId = user.iss + "#" + user.sub;
-  const userName = "testuser";
+  const token: any = req.user;
+  const userId = token.iss + "#" + token.sub;
+  const userName = req.body.name || "";
+  const user: usersModel.IUser = {
+    id: userId,
+    name: userName,
+  };
   (async () => {
-    const { rows } = await pool.query(query, [userId, userName]);
-    res.status(200).json({ id: userId, name: userName });
+    await usersModel.create(user);
+    res.status(StatusCodes.CREATED).json(user);
   })().catch((err) => {
+    console.log(err);
     setImmediate(() => {
-      res.status(400).json({ message: err });
+      res
+        .status(StatusCodes.INTERNAL_SERVER_ERROR)
+        .json({ message: ReasonPhrases.INTERNAL_SERVER_ERROR });
     });
   });
 });
