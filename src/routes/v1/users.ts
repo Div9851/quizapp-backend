@@ -15,7 +15,7 @@ router.get("/", (req: express.Request, res: express.Response) => {
     }
     res.status(StatusCodes.OK).json({ id: rows[0].id, name: rows[0].name });
   })().catch((err) => {
-    console.log(err);
+    console.error(err);
     setImmediate(() => {
       res
         .status(StatusCodes.INTERNAL_SERVER_ERROR)
@@ -37,7 +37,7 @@ router.post("/", (req: express.Request, res: express.Response) => {
     await usersModel.create(user);
     res.status(StatusCodes.CREATED).json(user);
   })().catch((err) => {
-    console.log(err);
+    console.error(err);
     setImmediate(() => {
       res
         .status(StatusCodes.INTERNAL_SERVER_ERROR)
