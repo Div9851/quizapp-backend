@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.post("/", (req: express.Request, res: express.Response) => {
   const token: any = req.user;
-  const userId = token.iss + "#" + token.sub;
+  const userId = token.sub;
   (async () => {
     const roomId = await roomsModel.create(userId);
     res.status(StatusCodes.CREATED).json({ roomId: roomId });
@@ -36,7 +36,7 @@ router.get("/:id/members", (req: express.Request, res: express.Response) => {
 
 router.post("/:id/members", (req: express.Request, res: express.Response) => {
   const token: any = req.user;
-  const userId = token.iss + "#" + token.sub;
+  const userId = token.sub;
   const roomId = req.params.id;
   (async () => {
     await roomsModel.join(roomId, userId);

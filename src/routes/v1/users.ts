@@ -7,7 +7,7 @@ const router = express.Router();
 // GETリクエスト
 router.get("/", (req: express.Request, res: express.Response) => {
   const token: any = req.user;
-  const userId = token.iss + "#" + token.sub;
+  const userId = token.sub;
   (async () => {
     const { rows } = await usersModel.get(userId);
     if (rows.length == 0) {
@@ -27,7 +27,7 @@ router.get("/", (req: express.Request, res: express.Response) => {
 // POSTリクエスト
 router.post("/", (req: express.Request, res: express.Response) => {
   const token: any = req.user;
-  const userId = token.iss + "#" + token.sub;
+  const userId = token.sub;
   const userName = req.body.name || "";
   const user: usersModel.IUser = {
     id: userId,
