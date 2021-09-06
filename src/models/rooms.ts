@@ -1,4 +1,3 @@
-import redis from "db/redis";
 import crypto from "crypto";
 import pool from "db/postgres";
 
@@ -15,22 +14,13 @@ const generateRoomId = (ownerId: string, createdAt: Date) => {
 
 const create = async (ownerId: string) => {
   const roomId = generateRoomId(ownerId, new Date());
-  const exist = await redis.sismember("rooms", roomId);
-  if (exist) {
-    throw new Error(`room '${roomId}' already exists`);
-  }
   const query = `INSERT INTO rooms (id, owner_id) VALUES ($1, $2)`;
   await pool.query(query, [roomId, ownerId]);
-  await redis.sadd("rooms", roomId);
   await join(roomId, ownerId);
   return roomId;
 };
 
 const getMembers = async (roomId: string) => {
-  const exist = await redis.sismember("rooms", roomId);
-  if (!exist) {
-    throw new Error(`room '${roomId}' does not exist`);
-  }
   const query = `SELECT id, name FROM users
   JOIN room_users ON users.id = room_users.user_id
   WHERE room_id = $1`;

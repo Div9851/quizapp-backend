@@ -11,9 +11,14 @@ const create = (user: IUser) => {
   return pool.query(query, [user.id, user.name]);
 };
 
+const update = (user: IUser) => {
+  const query = "UPDATE users SET name = $2 WHERE id = $1";
+  return pool.query(query, [user.id, user.name]);
+};
+
 const get = (id: string) => {
   const query = "SELECT id, name FROM users WHERE id = $1";
   return pool.query(query, [id]);
 };
 
-export { IUser, create, get };
+export { IUser, create, update, get };

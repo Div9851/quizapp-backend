@@ -9,7 +9,7 @@ router.post("/", (req: express.Request, res: express.Response) => {
   const userId = token.sub;
   (async () => {
     const roomId = await roomsModel.create(userId);
-    res.status(StatusCodes.CREATED).json({ roomId: roomId });
+    res.status(StatusCodes.OK).json({ id: roomId });
   })().catch((err) => {
     console.error(err);
     setImmediate(() => {
@@ -40,9 +40,7 @@ router.post("/:id/members", (req: express.Request, res: express.Response) => {
   const roomId = req.params.id;
   (async () => {
     await roomsModel.join(roomId, userId);
-    res
-      .status(StatusCodes.OK)
-      .json({ message: `user '${userId}' has joined room '${roomId}'` });
+    res.status(StatusCodes.OK).json({});
   })().catch((err) => {
     console.error(err);
     setImmediate(() => {
