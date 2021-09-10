@@ -18,6 +18,6 @@ io.on("connection", async (socket) => {
 });
 
 // APIサーバ起動
-server.listen(env.appPort, () => {
-  console.log("Express WebApi listening on port " + env.appPort);
+server.listen(env.port, () => {
+  console.log("Express WebApi listening on port " + env.port);
 });

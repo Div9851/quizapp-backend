@@ -1,7 +1,7 @@
 import * as dotenv from "dotenv";
 
 interface Env {
-  appPort: number;
+  port: number;
   jwksUri: string;
   audience: string;
   issuer: string;
@@ -18,7 +18,7 @@ interface Env {
 dotenv.config();
 
 const env: Env = {
-  appPort: parseInt(process.env.APP_PORT || "8000"),
+  port: parseInt(process.env.PORT || "8000"),
   jwksUri: process.env.JWKS_URI || "",
   audience: process.env.AUDIENCE || "",
   issuer: process.env.ISSUER || "",
