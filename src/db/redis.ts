@@ -1,13 +1,15 @@
 import Redis from "ioredis";
 import env from "env";
 
-const redis = new Redis({
-  host: env.redisHost,
-  port: env.redisPort,
-});
+const connect = () => {
+  const redis = new Redis({
+    host: env.redisHost,
+    port: env.redisPort,
+  });
+  redis.on("error", (err) => {
+    console.error(err);
+  });
+  return redis;
+};
 
-redis.on("error", (err) => {
-  console.error(err);
-});
-
-export default redis;
+export { connect };

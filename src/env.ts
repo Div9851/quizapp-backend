@@ -12,6 +12,7 @@ interface Env {
   pgDatabase: string;
   redisHost: string;
   redisPort: number;
+  corsOrigin: string;
 }
 
 dotenv.config();
@@ -28,6 +29,7 @@ const env: Env = {
   pgDatabase: process.env.PG_DB || "",
   redisHost: process.env.REDIS_HOST || "localhost",
   redisPort: parseInt(process.env.REDIS_PORT || "6379"),
+  corsOrigin: process.env.CORS_ORIGIN || "",
 };
 
 export default env;
