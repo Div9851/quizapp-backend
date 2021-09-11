@@ -15,7 +15,7 @@ const join = async (socketId: string, userId: string) => {
     return;
   }
   const opponentUserId = await sharedConnection.hget(
-    `socket:${socketId}`,
+    `socket:${opponentSocketId}`,
     "user-id"
   );
   if (opponentUserId === null) {
