@@ -9,4 +9,6 @@ const connect = () => {
   return redis;
 };
 
-export { connect };
+const sharedConnection = connect();
+
+export { connect, sharedConnection };

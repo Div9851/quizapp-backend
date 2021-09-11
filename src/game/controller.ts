@@ -1,5 +1,5 @@
 import { io } from "server";
-import { connect } from "db/redis";
+import { connect, sharedConnection } from "db/redis";
 import crypto from "crypto";
 import { shuffle } from "pandemonium";
 import { Redis } from "ioredis";
@@ -18,45 +18,51 @@ const generateRoomId = (player1: string, player2: string) => {
   return roomId;
 };
 
-const startGame = async (redis: Redis, player1: string, player2: string) => {
+const startGame = async (player1: string, player2: string) => {
   const roomId = generateRoomId(player1, player2);
   io.in(player1).socketsJoin(`room:${roomId}`);
   io.in(player2).socketsJoin(`room:${roomId}`);
   await Promise.all([
-    redis.hset(`socket:${player1}`, "room-id", roomId),
-    redis.hset(`socket:${player2}`, "room-id", roomId),
-    redis.hset(`socket:${player1}`, "score", "0"),
-    redis.hset(`socket:${player2}`, "score", "0"),
-    redis.hset(`room:${roomId}`, "status", StatusValues.Matched),
-    redis.hset(`room:${roomId}`, "player1", player1),
-    redis.hset(`room:${roomId}`, "player2", player2),
-    redis.hset(`room:${roomId}`, "question-number", "0"),
-    redis.lpush(`room:${roomId}:token`, "0"),
+    sharedConnection.hset(`socket:${player1}`, "room-id", roomId),
+    sharedConnection.hset(`socket:${player2}`, "room-id", roomId),
+    sharedConnection.hset(`socket:${player1}`, "score", "0"),
+    sharedConnection.hset(`socket:${player2}`, "score", "0"),
+    sharedConnection.hset(`room:${roomId}`, "status", StatusValues.Matched),
+    sharedConnection.hset(`room:${roomId}`, "player1", player1),
+    sharedConnection.hset(`room:${roomId}`, "player2", player2),
+    sharedConnection.hset(`room:${roomId}`, "question-number", "0"),
+    sharedConnection.lpush(`room:${roomId}:token`, "0"),
   ]);
   const { rows } = await getAll();
   const selected = shuffle(rows).slice(0, 30);
   for (const question of selected) {
     await Promise.all([
-      redis.rpush(`room:${roomId}:questions:content`, question.content),
-      redis.rpush(
+      sharedConnection.rpush(
+        `room:${roomId}:questions:content`,
+        question.content
+      ),
+      sharedConnection.rpush(
         `room:${roomId}:questions:display-answer`,
         question.display_answer
       ),
-      redis.rpush(`room:${roomId}:questions:answer`, question.answer),
+      sharedConnection.rpush(
+        `room:${roomId}:questions:answer`,
+        question.answer
+      ),
     ]);
   }
-  await checkGameStatus(redis, roomId);
+  await checkGameStatus(roomId);
 };
 
-const checkGameStatus = async (redis: Redis, roomId: string) => {
+const checkGameStatus = async (roomId: string) => {
   const [player1, player2] = await Promise.all([
-    redis.hget(`room:${roomId}`, "player1"),
-    redis.hget(`room:${roomId}`, "player2"),
+    sharedConnection.hget(`room:${roomId}`, "player1"),
+    sharedConnection.hget(`room:${roomId}`, "player2"),
   ]);
   const [scoreStr1, scoreStr2, questionNumberStr] = await Promise.all([
-    redis.hget(`socket:${player1}`, "score"),
-    redis.hget(`socket:${player2}`, "score"),
-    redis.hget(`room:${roomId}`, "question-number"),
+    sharedConnection.hget(`socket:${player1}`, "score"),
+    sharedConnection.hget(`socket:${player2}`, "score"),
+    sharedConnection.hget(`room:${roomId}`, "question-number"),
   ]);
   if (scoreStr1 === null || scoreStr2 === null || questionNumberStr === null)
     return;
@@ -76,18 +82,18 @@ const checkGameStatus = async (redis: Redis, roomId: string) => {
       setTimeout(() => io.in(`room:${roomId}`).emit("endGame", player2), ms);
     else setTimeout(() => io.in(`room:${roomId}`).emit("endGame", ""), ms);
   } else {
-    setTimeout(() => nextQuestion(redis, roomId), ms);
+    setTimeout(() => nextQuestion(roomId), ms);
   }
 };
 
-const nextQuestion = async (redis: Redis, roomId: string) => {
+const nextQuestion = async (roomId: string) => {
   const [player1, player2] = await Promise.all([
-    redis.hget(`room:${roomId}`, "player1"),
-    redis.hget(`room:${roomId}`, "player2"),
+    sharedConnection.hget(`room:${roomId}`, "player1"),
+    sharedConnection.hget(`room:${roomId}`, "player2"),
   ]);
   const [disconnect1, disconnect2] = await Promise.all([
-    redis.hget(`socket:${player1}`, "disconnect"),
-    redis.hget(`socket:${player2}`, "disconnect"),
+    sharedConnection.hget(`socket:${player1}`, "disconnect"),
+    sharedConnection.hget(`socket:${player2}`, "disconnect"),
   ]);
   if (disconnect1 === "1") {
     setTimeout(() => io.in(`room:${roomId}`).emit("endGame", player2), 1500);
@@ -97,56 +103,60 @@ const nextQuestion = async (redis: Redis, roomId: string) => {
     return;
   }
   await Promise.all([
-    redis.hset(`room:${roomId}`, "status", StatusValues.NextQuestion),
-    redis.hset(`socket:${player1}`, "answered", "0"),
-    redis.hset(`socket:${player2}`, "answered", "0"),
-    redis.hincrby(`room:${roomId}`, "question-number", 1),
-    redis.hset(`room:${roomId}`, "ready", "0"),
-    redis.hset(`room:${roomId}`, "timeup", "0"),
-    redis.hset(`room:${roomId}`, "incorrect", "0"),
-    redis.hdel(`room:${roomId}`, "answering"),
+    sharedConnection.hset(
+      `room:${roomId}`,
+      "status",
+      StatusValues.NextQuestion
+    ),
+    sharedConnection.hset(`socket:${player1}`, "answered", "0"),
+    sharedConnection.hset(`socket:${player2}`, "answered", "0"),
+    sharedConnection.hincrby(`room:${roomId}`, "question-number", 1),
+    sharedConnection.hset(`room:${roomId}`, "ready", "0"),
+    sharedConnection.hset(`room:${roomId}`, "timeup", "0"),
+    sharedConnection.hset(`room:${roomId}`, "incorrect", "0"),
+    sharedConnection.hdel(`room:${roomId}`, "answering"),
   ]);
   io.in(`room:${roomId}`).emit("next");
 };
 
-const readyHandler = async (redis: Redis, roomId: string) => {
-  const status = await redis.hget(`room:${roomId}`, "status");
+const readyHandler = async (roomId: string) => {
+  const status = await sharedConnection.hget(`room:${roomId}`, "status");
   if (status !== StatusValues.NextQuestion) return;
-  const ready = await redis.hincrby(`room:${roomId}`, "ready", 1);
+  const ready = await sharedConnection.hincrby(`room:${roomId}`, "ready", 1);
   if (ready >= 2) {
-    setTimeout(() => sendQuestion(redis, roomId), 1000);
+    setTimeout(() => sendQuestion(roomId), 1000);
   }
 };
 
-const sendQuestion = async (redis: Redis, roomId: string) => {
+const sendQuestion = async (roomId: string) => {
   const [content, displayAnswer, answer] = await Promise.all([
-    redis.lpop(`room:${roomId}:questions:content`),
-    redis.lpop(`room:${roomId}:questions:display-answer`),
-    redis.lpop(`room:${roomId}:questions:answer`),
+    sharedConnection.lpop(`room:${roomId}:questions:content`),
+    sharedConnection.lpop(`room:${roomId}:questions:display-answer`),
+    sharedConnection.lpop(`room:${roomId}:questions:answer`),
   ]);
   await Promise.all([
-    redis.hset(`room:${roomId}`, "status", StatusValues.Thinking),
-    redis.hset(`room:${roomId}`, "display-answer", displayAnswer),
-    redis.hset(`room:${roomId}`, "answer", answer),
+    sharedConnection.hset(`room:${roomId}`, "status", StatusValues.Thinking),
+    sharedConnection.hset(`room:${roomId}`, "display-answer", displayAnswer),
+    sharedConnection.hset(`room:${roomId}`, "answer", answer),
   ]);
   io.in(`room:${roomId}`).emit("question", content);
 };
 
-const pushHandler = async (redis: Redis, roomId: string, socketId: string) => {
+const pushHandler = async (roomId: string, socketId: string) => {
   const [status, answering, answered] = await Promise.all([
-    redis.hget(`room:${roomId}`, "status"),
-    redis.hget(`room:${roomId}`, "answering"),
-    redis.hget(`socket:${socketId}`, "answered"),
+    sharedConnection.hget(`room:${roomId}`, "status"),
+    sharedConnection.hget(`room:${roomId}`, "answering"),
+    sharedConnection.hget(`socket:${socketId}`, "answered"),
   ]);
   if (status !== StatusValues.Thinking) return;
   if (answering === null && answered === "0") {
     await Promise.all([
-      redis.hset(`room:${roomId}`, "answering", socketId),
-      redis.hset(`room:${roomId}`, "pos", "0"),
-      redis.hset(`socket:${socketId}`, "answered", "1"),
+      sharedConnection.hset(`room:${roomId}`, "answering", socketId),
+      sharedConnection.hset(`room:${roomId}`, "pos", "0"),
+      sharedConnection.hset(`socket:${socketId}`, "answered", "1"),
     ]);
     io.in(`room:${roomId}`).emit("answering", socketId);
-    await nextChoices(redis, roomId);
+    await nextChoices(roomId);
   }
 };
 
@@ -180,11 +190,11 @@ const generateDummy = (correctChar: string) => {
   return shuffle([...allChars.replace(correctChar, "")]).slice(0, 3);
 };
 
-const nextChoices = async (redis: Redis, roomId: string) => {
+const nextChoices = async (roomId: string) => {
   const [answering, answer, pos] = await Promise.all([
-    redis.hget(`room:${roomId}`, "answering"),
-    redis.hget(`room:${roomId}`, "answer"),
-    redis.hget(`room:${roomId}`, "pos"),
+    sharedConnection.hget(`room:${roomId}`, "answering"),
+    sharedConnection.hget(`room:${roomId}`, "answer"),
+    sharedConnection.hget(`room:${roomId}`, "pos"),
   ]);
   if (answering === null || answer === null || pos === null) return;
   const correctChar = answer[parseInt(pos)];
@@ -194,81 +204,87 @@ const nextChoices = async (redis: Redis, roomId: string) => {
 };
 
 const answerHandler = async (
-  redis: Redis,
   roomId: string,
   socketId: string,
   ...args: any[]
 ) => {
-  const answering = await redis.hget(`room:${roomId}`, "answering");
+  const answering = await sharedConnection.hget(`room:${roomId}`, "answering");
   if (answering !== socketId) return;
   io.in(`room:${roomId}`).emit("answer", args[0]);
   const [answer, posStr] = await Promise.all([
-    redis.hget(`room:${roomId}`, "answer"),
-    redis.hget(`room:${roomId}`, "pos"),
+    sharedConnection.hget(`room:${roomId}`, "answer"),
+    sharedConnection.hget(`room:${roomId}`, "pos"),
   ]);
   if (answer === null || posStr === null) return;
   const pos = parseInt(posStr);
   if (answer[pos] === args[0]) {
     if (pos + 1 === answer.length) {
-      await correctAnswer(redis, roomId);
-      await endQuestion(redis, roomId);
+      await correctAnswer(roomId);
+      await endQuestion(roomId);
     } else {
-      await redis.hincrby(`room:${roomId}`, "pos", 1);
-      await nextChoices(redis, roomId);
+      await sharedConnection.hincrby(`room:${roomId}`, "pos", 1);
+      await nextChoices(roomId);
     }
   } else {
-    await incorrectAnswer(redis, roomId);
-    const timeup = await redis.hget(`room:${roomId}`, "timeup");
-    if (timeup === "1") await endQuestion(redis, roomId);
+    await incorrectAnswer(roomId);
+    const timeup = await sharedConnection.hget(`room:${roomId}`, "timeup");
+    if (timeup === "1") await endQuestion(roomId);
   }
 };
 
-const correctAnswer = async (redis: Redis, roomId: string) => {
-  const answering = await redis.hget(`room:${roomId}`, "answering");
-  await redis.hdel(`room:${roomId}`, "answering");
-  await redis.hincrby(`socket:${answering}`, "score", 10);
+const correctAnswer = async (roomId: string) => {
+  const answering = await sharedConnection.hget(`room:${roomId}`, "answering");
+  await sharedConnection.hdel(`room:${roomId}`, "answering");
+  await sharedConnection.hincrby(`socket:${answering}`, "score", 10);
   io.in(`room:${roomId}`).emit("correct", answering);
 };
 
-const incorrectAnswer = async (redis: Redis, roomId: string) => {
-  const answering = await redis.hget(`room:${roomId}`, "answering");
-  await redis.hdel(`room:${roomId}`, "answering");
-  const score = await redis.hget(`socket:${answering}`, "score");
+const incorrectAnswer = async (roomId: string) => {
+  const answering = await sharedConnection.hget(`room:${roomId}`, "answering");
+  await sharedConnection.hdel(`room:${roomId}`, "answering");
+  const score = await sharedConnection.hget(`socket:${answering}`, "score");
   if (score === null) return;
   if (parseInt(score) > 0) {
-    await redis.hincrby(`socket:${answering}`, "score", -10);
+    await sharedConnection.hincrby(`socket:${answering}`, "score", -10);
   }
   io.in(`room:${roomId}`).emit("incorrect", answering);
-  const incorrect = await redis.hincrby(`room:${roomId}`, "incorrect", 1);
-  if (incorrect >= 2) await endQuestion(redis, roomId);
+  const incorrect = await sharedConnection.hincrby(
+    `room:${roomId}`,
+    "incorrect",
+    1
+  );
+  if (incorrect >= 2) await endQuestion(roomId);
 };
 
-const endQuestion = async (redis: Redis, roomId: string) => {
-  await redis.hset(`room:${roomId}`, "status", StatusValues.EndQuestion);
-  const answer = await redis.hget(`room:${roomId}`, "display-answer");
+const endQuestion = async (roomId: string) => {
+  await sharedConnection.hset(
+    `room:${roomId}`,
+    "status",
+    StatusValues.EndQuestion
+  );
+  const answer = await sharedConnection.hget(
+    `room:${roomId}`,
+    "display-answer"
+  );
   io.in(`room:${roomId}`).emit("endQuestion", answer);
-  setTimeout(() => checkGameStatus(redis, roomId), 1000);
+  setTimeout(() => checkGameStatus(roomId), 1000);
 };
 
-const timeupHandler = async (redis: Redis, roomId: string) => {
+const timeupHandler = async (roomId: string) => {
   const [status, answering] = await Promise.all([
-    redis.hget(`room:${roomId}`, "status"),
-    redis.hget(`room:${roomId}`, "answering"),
+    sharedConnection.hget(`room:${roomId}`, "status"),
+    sharedConnection.hget(`room:${roomId}`, "answering"),
   ]);
   if (status !== StatusValues.Thinking) return;
-  await redis.hset(`room:${roomId}`, "timeup", "1");
-  if (answering === null) await endQuestion(redis, roomId);
+  await sharedConnection.hset(`room:${roomId}`, "timeup", "1");
+  if (answering === null) await endQuestion(roomId);
 };
 
-const disconnectHandler = async (
-  redis: Redis,
-  roomId: string,
-  socketId: string
-) => {
+const disconnectHandler = async (roomId: string, socketId: string) => {
   const [status, player1, player2] = await Promise.all([
-    redis.hget(`room:${roomId}`, "status"),
-    redis.hget(`room:${roomId}`, "player1"),
-    redis.hget(`room:${roomId}`, "player2"),
+    sharedConnection.hget(`room:${roomId}`, "status"),
+    sharedConnection.hget(`room:${roomId}`, "player1"),
+    sharedConnection.hget(`room:${roomId}`, "player2"),
   ]);
   if (status === StatusValues.NextQuestion) {
     if (player1 === socketId)
@@ -288,15 +304,15 @@ const anyEventHandler = async (
   if (roomId === null) return;
   await redis.blpop(`room:${roomId}:token`, 0);
   if (event === "ready") {
-    await readyHandler(redis, roomId);
+    await readyHandler(roomId);
   } else if (event === "push") {
-    await pushHandler(redis, roomId, socketId);
+    await pushHandler(roomId, socketId);
   } else if (event === "answer") {
-    await answerHandler(redis, roomId, socketId, ...args);
+    await answerHandler(roomId, socketId, ...args);
   } else if (event === "timeup") {
-    await timeupHandler(redis, roomId);
+    await timeupHandler(roomId);
   } else if (event === "disconnecting") {
-    await disconnectHandler(redis, roomId, socketId);
+    await disconnectHandler(roomId, socketId);
   }
   await redis.rpush(`room:${roomId}:token`, "0");
   redis.disconnect();

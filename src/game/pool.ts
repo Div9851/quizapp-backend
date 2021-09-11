@@ -1,36 +1,35 @@
 import { io } from "server";
 import { startGame } from "./controller";
-import { connect } from "db/redis";
+import { connect, sharedConnection } from "db/redis";
 
 const join = async (socketId: string, userId: string) => {
-  const redis = connect();
-  await redis.hset(`socket:${socketId}`, "user-id", userId);
-  const numberOfPlayers = await redis.scard("pool");
+  await sharedConnection.hset(`socket:${socketId}`, "user-id", userId);
+  const numberOfPlayers = await sharedConnection.scard("pool");
   if (numberOfPlayers === 0) {
-    redis.sadd("pool", socketId);
+    sharedConnection.sadd("pool", socketId);
     return;
   }
-  const opponentSocketId = await redis.spop("pool");
+  const opponentSocketId = await sharedConnection.spop("pool");
   if (opponentSocketId === null) {
     console.error("opponentSocketId === null");
     return;
   }
-  const opponentUserId = await redis.hget(`socket:${socketId}`, "user-id");
+  const opponentUserId = await sharedConnection.hget(
+    `socket:${socketId}`,
+    "user-id"
+  );
   if (opponentUserId === null) {
     console.error("opponentUserId === null");
     return;
   }
-  redis.disconnect();
   io.in(socketId).emit("match", opponentUserId);
   io.in(opponentSocketId).emit("match", userId);
-  startGame(redis, socketId, opponentSocketId);
+  startGame(socketId, opponentSocketId);
 };
 
 const leave = async (socketId: string) => {
-  const redis = connect();
-  await redis.srem(`pool`, socketId);
-  await redis.hset(`socket:${socketId}`, "disconnect", "1");
-  redis.disconnect();
+  await sharedConnection.srem(`pool`, socketId);
+  await sharedConnection.hset(`socket:${socketId}`, "disconnect", "1");
 };
 
 export { join, leave };
