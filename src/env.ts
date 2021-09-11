@@ -8,6 +8,7 @@ interface Env {
   databaseUrl: string;
   redisUrl: string;
   corsOrigin: string;
+  noSSL: string;
 }
 
 dotenv.config();
@@ -20,6 +21,7 @@ const env: Env = {
   databaseUrl: process.env.DATABASE_URL || "",
   redisUrl: process.env.REDIS_URL || "",
   corsOrigin: process.env.CORS_ORIGIN || "",
+  noSSL: process.env.NO_SSL || "0",
 };
 
 export default env;
