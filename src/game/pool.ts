@@ -20,6 +20,7 @@ const join = async (socketId: string, userId: string) => {
     console.error("opponentUserId === null");
     return;
   }
+  redis.disconnect();
   io.in(socketId).emit("match", opponentUserId);
   io.in(opponentSocketId).emit("match", userId);
   startGame(redis, socketId, opponentSocketId);
@@ -29,6 +30,7 @@ const leave = async (socketId: string) => {
   const redis = connect();
   await redis.srem(`pool`, socketId);
   await redis.hset(`socket:${socketId}`, "disconnect", "1");
+  redis.disconnect();
 };
 
 export { join, leave };

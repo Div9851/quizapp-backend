@@ -299,6 +299,7 @@ const anyEventHandler = async (
     await disconnectHandler(redis, roomId, socketId);
   }
   await redis.rpush(`room:${roomId}:token`, "0");
+  redis.disconnect();
 };
 
 export { startGame, anyEventHandler };
